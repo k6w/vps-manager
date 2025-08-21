@@ -921,6 +921,13 @@ class TerminalUI:
         
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
+        
+        # Flush input buffer to prevent key release detection
+        stdscr.nodelay(True)
+        while stdscr.getch() != -1:
+            pass
+        stdscr.nodelay(False)
+        
         stdscr.getch()
     
     def _confirm_action(self, stdscr, message: str) -> bool:
@@ -1662,6 +1669,13 @@ class TerminalUI:
         
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
+        
+        # Flush input buffer to prevent key release detection
+        stdscr.nodelay(True)
+        while stdscr.getch() != -1:
+            pass
+        stdscr.nodelay(False)
+        
         stdscr.getch()
     
     def _view_current_settings(self, stdscr):
@@ -1728,9 +1742,16 @@ class TerminalUI:
         
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
+        
+        # Flush input buffer to prevent key release detection
+        stdscr.nodelay(True)
+        while stdscr.getch() != -1:
+            pass
+        stdscr.nodelay(False)
+        
         stdscr.getch()
-    
-    def _manual_update_check(self, stdscr):
+     
+     def _manual_update_check(self, stdscr):
         """Manually check for updates"""
         stdscr.clear()
         stdscr.addstr(1, 2, "Checking for Updates")
