@@ -1209,82 +1209,78 @@ class TerminalUI:
     
     def _nginx_status(self, stdscr):
         """Show NGINX status and management options"""
-        while True:
+        stdscr.clear()
+        stdscr.addstr(1, 2, "NGINX Status & Management")
+        stdscr.addstr(2, 2, "=" * 25)
+        
+        # Get NGINX status
+        is_active, status = self.manager.get_nginx_status()
+        status_text = "Running" if is_active else "Stopped"
+        status_attr = curses.A_NORMAL if is_active else curses.A_BOLD
+        
+        stdscr.addstr(4, 2, f"NGINX Status: ", curses.A_BOLD)
+        stdscr.addstr(4, 16, status_text, status_attr)
+        
+        # Test configuration
+        stdscr.addstr(6, 2, "Testing configuration...", curses.A_DIM)
+        stdscr.refresh()
+        
+        test_success, test_output = self.manager.run_command("nginx -t")
+        test_status = "Valid" if test_success else "Invalid"
+        test_attr = curses.A_NORMAL if test_success else curses.A_BOLD
+        
+        stdscr.addstr(6, 2, f"Configuration: ")
+        stdscr.addstr(6, 17, test_status, test_attr)
+        
+        if not test_success:
+            stdscr.addstr(7, 2, "Error: ", curses.A_BOLD)
+            stdscr.addstr(7, 9, test_output[:curses.COLS - 12])
+        
+        # Management options
+        options = ["Reload NGINX", "Restart NGINX", "Test Configuration", "Back to Main Menu"]
+        
+        stdscr.addstr(9, 2, "Management Options:")
+        for i, option in enumerate(options):
+            stdscr.addstr(11 + i, 4, f"{i + 1}. {option}")
+        
+        stdscr.addstr(curses.LINES - 2, 2, "Select option (1-4): ")
+        stdscr.refresh()
+        
+        key = stdscr.getch()
+        
+        if key == ord('1'):  # Reload
             stdscr.clear()
-            stdscr.addstr(1, 2, "NGINX Status & Management")
-            stdscr.addstr(2, 2, "=" * 25)
-            
-            # Get NGINX status
-            is_active, status = self.manager.get_nginx_status()
-            status_text = "Running" if is_active else "Stopped"
-            status_attr = curses.A_NORMAL if is_active else curses.A_BOLD
-            
-            stdscr.addstr(4, 2, f"NGINX Status: ", curses.A_BOLD)
-            stdscr.addstr(4, 16, status_text, status_attr)
-            
-            # Test configuration
-            stdscr.addstr(6, 2, "Testing configuration...", curses.A_DIM)
+            stdscr.addstr(1, 2, "Reloading NGINX...")
             stdscr.refresh()
-            
-            test_success, test_output = self.manager.run_command("nginx -t")
-            test_status = "Valid" if test_success else "Invalid"
-            test_attr = curses.A_NORMAL if test_success else curses.A_BOLD
-            
-            stdscr.addstr(6, 2, f"Configuration: ")
-            stdscr.addstr(6, 17, test_status, test_attr)
-            
-            if not test_success:
-                stdscr.addstr(7, 2, "Error: ", curses.A_BOLD)
-                stdscr.addstr(7, 9, test_output[:curses.COLS - 12])
-            
-            # Management options
-            options = ["Reload NGINX", "Restart NGINX", "Test Configuration", "Back to Main Menu"]
-            
-            stdscr.addstr(9, 2, "Management Options:")
-            for i, option in enumerate(options):
-                stdscr.addstr(11 + i, 4, f"{i + 1}. {option}")
-            
-            stdscr.addstr(curses.LINES - 2, 2, "Select option (1-4) or press any other key to refresh: ")
-            stdscr.refresh()
-            
-            key = stdscr.getch()
-            
-            if key == ord('1'):  # Reload
+            success, output = self.manager.run_command("systemctl reload nginx")
+            message = "NGINX reloaded successfully" if success else f"Failed to reload NGINX: {output}"
+            self._show_message(stdscr, "Reload Result", message, not success)
+        
+        elif key == ord('2'):  # Restart
+            if self._confirm_action(stdscr, "Restart NGINX service?"):
                 stdscr.clear()
-                stdscr.addstr(1, 2, "Reloading NGINX...")
+                stdscr.addstr(1, 2, "Restarting NGINX...")
                 stdscr.refresh()
-                success, output = self.manager.run_command("systemctl reload nginx")
-                message = "NGINX reloaded successfully" if success else f"Failed to reload NGINX: {output}"
-                self._show_message(stdscr, "Reload Result", message, not success)
+                success, output = self.manager.restart_nginx()
+                message = "NGINX restarted successfully" if success else f"Failed to restart NGINX: {output}"
+                self._show_message(stdscr, "Restart Result", message, not success)
+        
+        elif key == ord('3'):  # Test
+            stdscr.clear()
+            stdscr.addstr(1, 2, "Testing NGINX Configuration")
+            stdscr.addstr(2, 2, "=" * 28)
+            success, output = self.manager.run_command("nginx -t")
             
-            elif key == ord('2'):  # Restart
-                if self._confirm_action(stdscr, "Restart NGINX service?"):
-                    stdscr.clear()
-                    stdscr.addstr(1, 2, "Restarting NGINX...")
-                    stdscr.refresh()
-                    success, output = self.manager.restart_nginx()
-                    message = "NGINX restarted successfully" if success else f"Failed to restart NGINX: {output}"
-                    self._show_message(stdscr, "Restart Result", message, not success)
+            if success:
+                stdscr.addstr(4, 2, "✓ Configuration is valid", curses.A_BOLD)
+            else:
+                stdscr.addstr(4, 2, "✗ Configuration has errors:", curses.A_BOLD)
+                lines = output.split('\n')
+                for i, line in enumerate(lines[:10]):  # Show first 10 lines
+                    stdscr.addstr(6 + i, 2, line[:curses.COLS - 4])
             
-            elif key == ord('3'):  # Test
-                stdscr.clear()
-                stdscr.addstr(1, 2, "Testing NGINX Configuration")
-                stdscr.addstr(2, 2, "=" * 28)
-                success, output = self.manager.run_command("nginx -t")
-                
-                if success:
-                    stdscr.addstr(4, 2, "✓ Configuration is valid", curses.A_BOLD)
-                else:
-                    stdscr.addstr(4, 2, "✗ Configuration has errors:", curses.A_BOLD)
-                    lines = output.split('\n')
-                    for i, line in enumerate(lines[:10]):  # Show first 10 lines
-                        stdscr.addstr(6 + i, 2, line[:curses.COLS - 4])
-                
-                stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
-                stdscr.getch()
-            
-            elif key == ord('4'):  # Back
-                break
+            stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
+            stdscr.getch()
     
     def _backup_configurations(self, stdscr):
         """Backup configurations"""
@@ -1625,7 +1621,22 @@ class TerminalUI:
         self.manager.save_config()
         
         status = "enabled" if new_setting else "disabled"
-        self._show_message(stdscr, "Success", f"Auto-backup {status}")
+        
+        # Show detailed status message
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Auto-backup Setting")
+        stdscr.addstr(2, 2, "=" * 18)
+        stdscr.addstr(4, 2, f"Auto-backup has been {status}.", curses.A_BOLD)
+        
+        if new_setting:
+            stdscr.addstr(6, 2, "Automatic backups will now be created before making changes.")
+        else:
+            stdscr.addstr(6, 2, "Automatic backups are now disabled.")
+            stdscr.addstr(7, 2, "You can still create manual backups from the main menu.")
+        
+        stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
+        stdscr.refresh()
+        stdscr.getch()
     
     def _toggle_default_ssl(self, stdscr):
         """Toggle default SSL setting"""
@@ -1635,7 +1646,23 @@ class TerminalUI:
         self.manager.save_config()
         
         status = "enabled" if new_setting else "disabled"
-        self._show_message(stdscr, "Success", f"Default SSL {status}")
+        
+        # Show detailed status message
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Default SSL Setting")
+        stdscr.addstr(2, 2, "=" * 19)
+        stdscr.addstr(4, 2, f"Default SSL has been {status}.", curses.A_BOLD)
+        
+        if new_setting:
+            stdscr.addstr(6, 2, "SSL will now be enabled by default for new domains.")
+            stdscr.addstr(7, 2, "SSL certificates will be automatically generated.")
+        else:
+            stdscr.addstr(6, 2, "SSL is now disabled by default for new domains.")
+            stdscr.addstr(7, 2, "You can still enable SSL manually when adding domains.")
+        
+        stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
+        stdscr.refresh()
+        stdscr.getch()
     
     def _view_current_settings(self, stdscr):
         """View current settings"""
@@ -1679,13 +1706,29 @@ class TerminalUI:
     
     def _toggle_auto_update(self, stdscr):
         """Toggle auto-update setting"""
-        current_setting = self.manager.config.get('auto_update', True)
+        current_setting = self.manager.config.get('auto_update', False)
         new_setting = not current_setting
         self.manager.config['auto_update'] = new_setting
         self.manager.save_config()
         
         status = "enabled" if new_setting else "disabled"
-        self._show_message(stdscr, "Success", f"Auto-update {status}")
+        
+        # Show detailed status message
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Auto-update Setting")
+        stdscr.addstr(2, 2, "=" * 19)
+        stdscr.addstr(4, 2, f"Auto-update has been {status}.", curses.A_BOLD)
+        
+        if new_setting:
+            stdscr.addstr(6, 2, "The script will now check for updates automatically.")
+            stdscr.addstr(7, 2, "Updates will be downloaded and applied when available.")
+        else:
+            stdscr.addstr(6, 2, "Automatic updates are now disabled.")
+            stdscr.addstr(7, 2, "You can still check for updates manually from the main menu.")
+        
+        stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
+        stdscr.refresh()
+        stdscr.getch()
     
     def _manual_update_check(self, stdscr):
         """Manually check for updates"""
