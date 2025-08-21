@@ -39,7 +39,7 @@ A comprehensive terminal-based manager for Ubuntu 24.04 VPS that simplifies NGIN
 
 1. **Download and run the installer:**
    ```bash
-   curl -sSL https://raw.githubusercontent.com/your-repo/vps-manager/main/install.sh | bash
+   curl -sSL https://raw.githubusercontent.com/k6w/vps-manager/main/install.sh | bash
    ```
 
 2. **Or manual installation:**
@@ -319,7 +319,7 @@ sudo sysctl -p
 
 ```bash
 # Clone repository
-git clone https://github.com/your-repo/vps-manager.git
+git clone https://github.com/k6w/vps-manager.git
 cd vps-manager
 
 # Install development dependencies
