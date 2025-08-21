@@ -19,6 +19,7 @@ import tempfile
 import socket
 import signal
 import argparse
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -427,20 +428,26 @@ class VPSManager:
             self.backup_domain_config(name)
             
             # Disable and remove NGINX configuration
-            self.disable_site(name)
-            self.remove_nginx_config(name)
+            success, message = self.disable_site(name)
+            if not success:
+                Logger.warning(f"Failed to disable site {name}: {message}")
+            
+            success, message = self.remove_nginx_config(name)
+            if not success:
+                Logger.warning(f"Failed to remove NGINX config for {name}: {message}")
+            
+            # Test NGINX configuration before finalizing deletion
+            success, message = self.test_and_reload_nginx()
+            if not success:
+                Logger.error(f"NGINX configuration test failed after removing {name}: {message}")
+                return False, f"NGINX configuration test failed: {message}"
             
             # Remove SSL certificate (optional, keep for potential reuse)
             # self.remove_ssl_certificate(name)
             
-            # Remove from domains list
+            # Only remove from domains list after successful NGINX reload
             self.domains = [d for d in self.domains if d.name != name]
             self.save_domains()
-            
-            # Test and reload NGINX
-            success, message = self.test_and_reload_nginx()
-            if not success:
-                Logger.warning(f"NGINX reload failed after deleting {name}: {message}")
             
             Logger.info(f"Domain {name} deleted successfully")
             return True, f"Domain {name} deleted successfully"
@@ -835,6 +842,11 @@ class VPSManager:
         """Check if updates are available
         Returns: (has_update, current_version, latest_version)
         """
+        # Update functionality disabled - original repository not available
+        if VERSION_URL is None:
+            Logger.info("Update functionality is disabled - no update repository configured")
+            return False, VERSION, VERSION
+            
         try:
             with urllib.request.urlopen(VERSION_URL, timeout=10) as response:
                 latest_version = response.read().decode('utf-8').strip()
@@ -872,6 +884,10 @@ class VPSManager:
         """Download and install updates
         Returns: (success, message)
         """
+        # Update functionality disabled - original repository not available
+        if UPDATE_URL is None:
+            return False, "Update functionality is disabled - no update repository configured"
+            
         try:
             # Create backup of current version
             current_script = Path(__file__)
@@ -1542,16 +1558,31 @@ class TerminalUI:
         domain_name = domain_names[selection]
         
         if self._confirm_action(stdscr, f"Delete domain '{domain_name}'?\n\nThis will remove the NGINX configuration and disable the site."):
-            # Show progress
+            # Show progress with proper timing
             stdscr.clear()
-            stdscr.addstr(1, 2, "Deleting Domain...")
-            stdscr.addstr(3, 2, "Please wait...")
+            stdscr.addstr(1, 2, "Deleting Domain...", curses.A_BOLD)
+            stdscr.addstr(3, 2, "Please wait...", curses.A_DIM)
             stdscr.refresh()
+            
+            # Add a small delay to ensure the message is visible
+            time.sleep(0.5)
+            
+            # Show detailed progress
+            stdscr.addstr(5, 2, "• Disabling site...")
+            stdscr.refresh()
+            time.sleep(0.3)
             
             # Delete domain
             success, message = self.manager.delete_domain(domain_name)
             
             if success:
+                stdscr.addstr(6, 2, "• Removing NGINX configuration...")
+                stdscr.refresh()
+                time.sleep(0.3)
+                stdscr.addstr(7, 2, "• Reloading NGINX...")
+                stdscr.refresh()
+                time.sleep(0.5)
+                
                 self._show_message(stdscr, "Success", message)
             else:
                 self._show_message(stdscr, "Error", message, True)
