@@ -21,6 +21,13 @@ import signal
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+import urllib.request
+
+# Version and Update Configuration
+VERSION = "1.2.0"
+CONFIG_VERSION = "1.1.0"  # Increment when new config options are added
+UPDATE_URL = "https://raw.githubusercontent.com/your-repo/vps-manager/main/vps-manager.py"
+VERSION_URL = "https://raw.githubusercontent.com/your-repo/vps-manager/main/VERSION"
 
 # Configuration
 MANAGER_DIR = Path.home() / "manager"
@@ -132,6 +139,7 @@ class VPSManager:
     def complete_setup(self):
         """Mark setup as completed"""
         self.config['setup_completed'] = True
+        self.config['config_version'] = CONFIG_VERSION  # Set current config version
         self.save_config()
     
     def load_domains(self):
@@ -607,6 +615,117 @@ class VPSManager:
                 backups.append(backup_file.name)
         
         return sorted(backups, reverse=True)  # Most recent first
+    
+    def check_for_updates(self) -> Tuple[bool, str, str]:
+        """Check if updates are available
+        Returns: (has_update, current_version, latest_version)
+        """
+        try:
+            with urllib.request.urlopen(VERSION_URL, timeout=10) as response:
+                latest_version = response.read().decode('utf-8').strip()
+                
+            current_version = VERSION
+            has_update = self._compare_versions(current_version, latest_version) < 0
+            
+            return has_update, current_version, latest_version
+            
+        except Exception as e:
+            Logger.error(f"Failed to check for updates: {e}")
+            return False, VERSION, VERSION
+    
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """Compare two version strings
+        Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+        """
+        def version_tuple(v):
+            return tuple(map(int, (v.split("."))))
+        
+        try:
+            v1_tuple = version_tuple(v1)
+            v2_tuple = version_tuple(v2)
+            
+            if v1_tuple < v2_tuple:
+                return -1
+            elif v1_tuple > v2_tuple:
+                return 1
+            else:
+                return 0
+        except ValueError:
+            return 0
+    
+    def download_update(self) -> Tuple[bool, str]:
+        """Download and install updates
+        Returns: (success, message)
+        """
+        try:
+            # Create backup of current version
+            current_script = Path(__file__)
+            backup_path = current_script.parent / f"vps-manager.py.backup.{VERSION}"
+            shutil.copy2(current_script, backup_path)
+            Logger.info(f"Created backup at {backup_path}")
+            
+            # Download new version
+            with urllib.request.urlopen(UPDATE_URL, timeout=30) as response:
+                new_content = response.read().decode('utf-8')
+            
+            # Write new version
+            with open(current_script, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            
+            Logger.info("Update downloaded and installed successfully")
+            return True, "Update installed successfully. Please restart the application."
+            
+        except Exception as e:
+            Logger.error(f"Failed to download update: {e}")
+            return False, f"Failed to download update: {e}"
+    
+    def auto_update_check(self) -> bool:
+        """Check if auto-update is enabled in config"""
+        return self.config.get('auto_update', False)
+    
+    def get_config_version(self) -> str:
+        """Get the config version from saved configuration"""
+        return self.config.get('config_version', '1.0.0')
+    
+    def update_config_version(self):
+        """Update config version to current version"""
+        self.config['config_version'] = CONFIG_VERSION
+        self.save_config()
+    
+    def get_missing_config_options(self) -> List[str]:
+        """Get list of config options that are missing or new"""
+        current_config_version = self.get_config_version()
+        missing_options = []
+        
+        # Define config options by version
+        config_options_by_version = {
+            '1.0.0': ['certbot_email', 'auto_backup', 'default_ssl', 'setup_completed'],
+            '1.1.0': ['auto_update']  # New in version 1.1.0
+        }
+        
+        # Check which options are missing based on version progression
+        if self._compare_versions(current_config_version, '1.1.0') < 0:
+            if 'auto_update' not in self.config:
+                missing_options.append('auto_update')
+        
+        return missing_options
+    
+    def needs_selective_onboarding(self) -> bool:
+        """Check if selective onboarding is needed for new config options"""
+        return len(self.get_missing_config_options()) > 0
+    
+    def run_selective_onboarding(self, ui_instance):
+        """Run selective onboarding for missing config options"""
+        missing_options = self.get_missing_config_options()
+        if not missing_options:
+            return
+        
+        # Run the selective onboarding UI
+        import curses
+        curses.wrapper(ui_instance._selective_onboarding_flow, missing_options)
+        
+        # Update config version after selective onboarding
+        self.update_config_version()
 
 class TerminalUI:
     """Terminal-based user interface using curses"""
@@ -1327,6 +1446,18 @@ class TerminalUI:
             return
         self.manager.config['default_ssl'] = default_ssl.lower() not in ['n', 'no']
         
+        # Ask about auto-update
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Auto-Update Configuration")
+        stdscr.addstr(2, 2, "=" * 25)
+        stdscr.addstr(4, 2, "Would you like to enable automatic update checking?")
+        stdscr.addstr(5, 2, "This will check for new versions when the application starts.")
+        
+        auto_update = self._get_input(stdscr, "Enable auto-update? (Y/n)", 7, 2, "y")
+        if auto_update is None:  # User cancelled
+            return
+        self.manager.config['auto_update'] = auto_update.lower() not in ['n', 'no']
+        
         # Summary and confirmation
         stdscr.clear()
         stdscr.addstr(1, 2, "Configuration Summary")
@@ -1338,6 +1469,8 @@ class TerminalUI:
         stdscr.addstr(y_pos, 2, f"Auto-backup: {'Yes' if self.manager.config.get('auto_backup', False) else 'No'}")
         y_pos += 1
         stdscr.addstr(y_pos, 2, f"Default SSL: {'Yes' if self.manager.config.get('default_ssl', True) else 'No'}")
+        y_pos += 1
+        stdscr.addstr(y_pos, 2, f"Auto-update: {'Yes' if self.manager.config.get('auto_update', True) else 'No'}")
         y_pos += 2
         
         stdscr.addstr(y_pos, 2, "Press any key to save configuration and continue...")
@@ -1357,12 +1490,61 @@ class TerminalUI:
         stdscr.refresh()
         stdscr.getch()
     
+    def _selective_onboarding_flow(self, stdscr, missing_options: List[str]):
+        """Selective onboarding flow for new configuration options"""
+        curses.curs_set(0)
+        stdscr.keypad(True)
+        
+        # Welcome screen for selective onboarding
+        stdscr.clear()
+        stdscr.addstr(1, 2, "New Configuration Options Available!")
+        stdscr.addstr(2, 2, "=" * 36)
+        stdscr.addstr(4, 2, "The VPS Manager has been updated with new features.")
+        stdscr.addstr(5, 2, "Let's configure the new options.")
+        stdscr.addstr(7, 2, "Press any key to continue...")
+        stdscr.refresh()
+        stdscr.getch()
+        
+        # Handle each missing option
+        for option in missing_options:
+            if option == 'auto_update':
+                self._configure_auto_update_option(stdscr)
+            # Add more options here as they are introduced in future versions
+        
+        # Show completion message
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Configuration Updated!")
+        stdscr.addstr(2, 2, "=" * 22)
+        stdscr.addstr(4, 2, "New configuration options have been set successfully.")
+        stdscr.addstr(5, 2, "You can change these settings later from the Settings menu.")
+        stdscr.addstr(7, 2, "Press any key to continue...")
+        stdscr.refresh()
+        stdscr.getch()
+    
+    def _configure_auto_update_option(self, stdscr):
+        """Configure the auto-update option during selective onboarding"""
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Auto-Update Configuration")
+        stdscr.addstr(2, 2, "=" * 25)
+        stdscr.addstr(4, 2, "NEW FEATURE: Automatic Update Checking")
+        stdscr.addstr(6, 2, "Would you like to enable automatic update checking?")
+        stdscr.addstr(7, 2, "This will check for new versions when the application starts.")
+        stdscr.addstr(8, 2, "You can always change this setting later.")
+        
+        auto_update = self._get_input(stdscr, "Enable auto-update? (Y/n)", 10, 2, "y")
+        if auto_update is None:  # User cancelled, set default
+            auto_update = "y"
+        self.manager.config['auto_update'] = auto_update.lower() not in ['n', 'no']
+        self.manager.save_config()
+    
     def _settings_menu(self, stdscr):
         """Settings management menu"""
         settings_options = [
             "Change Certbot Email",
             "Toggle Auto-backup",
             "Toggle Default SSL",
+            "Toggle Auto-update",
+            "Check for Updates",
             "View Current Settings",
             "Reset to Defaults",
             "Back to Main Menu"
@@ -1397,11 +1579,15 @@ class TerminalUI:
                     self._toggle_auto_backup(stdscr)
                 elif current_selection == 2:  # Toggle Default SSL
                     self._toggle_default_ssl(stdscr)
-                elif current_selection == 3:  # View Current Settings
+                elif current_selection == 3:  # Toggle Auto-update
+                    self._toggle_auto_update(stdscr)
+                elif current_selection == 4:  # Check for Updates
+                    self._manual_update_check(stdscr)
+                elif current_selection == 5:  # View Current Settings
                     self._view_current_settings(stdscr)
-                elif current_selection == 4:  # Reset to Defaults
+                elif current_selection == 6:  # Reset to Defaults
                     self._reset_settings(stdscr)
-                elif current_selection == 5:  # Back
+                elif current_selection == 7:  # Back
                     break
             elif key == 27:  # ESC
                 break
@@ -1470,6 +1656,10 @@ class TerminalUI:
         stdscr.addstr(y_pos, 2, f"Default SSL: {default_ssl}")
         y_pos += 1
         
+        auto_update = 'Yes' if self.manager.config.get('auto_update', True) else 'No'
+        stdscr.addstr(y_pos, 2, f"Auto-update: {auto_update}")
+        y_pos += 1
+        
         setup_completed = 'Yes' if self.manager.config.get('setup_completed', False) else 'No'
         stdscr.addstr(y_pos, 2, f"Setup Completed: {setup_completed}")
         y_pos += 2
@@ -1486,6 +1676,63 @@ class TerminalUI:
             self.manager.config = {'setup_completed': True}
             self.manager.save_config()
             self._show_message(stdscr, "Success", "Settings reset to defaults")
+    
+    def _toggle_auto_update(self, stdscr):
+        """Toggle auto-update setting"""
+        current_setting = self.manager.config.get('auto_update', True)
+        new_setting = not current_setting
+        self.manager.config['auto_update'] = new_setting
+        self.manager.save_config()
+        
+        status = "enabled" if new_setting else "disabled"
+        self._show_message(stdscr, "Success", f"Auto-update {status}")
+    
+    def _manual_update_check(self, stdscr):
+        """Manually check for updates"""
+        stdscr.clear()
+        stdscr.addstr(1, 2, "Checking for Updates")
+        stdscr.addstr(2, 2, "=" * 20)
+        stdscr.addstr(4, 2, "Checking for available updates...")
+        stdscr.refresh()
+        
+        try:
+            has_update, current_version, latest_version = self.manager.check_for_updates()
+            
+            stdscr.clear()
+            stdscr.addstr(1, 2, "Update Check Results")
+            stdscr.addstr(2, 2, "=" * 20)
+            stdscr.addstr(4, 2, f"Current version: v{current_version}")
+            stdscr.addstr(5, 2, f"Latest version:  v{latest_version}")
+            
+            if has_update:
+                stdscr.addstr(7, 2, "Update available!", curses.A_BOLD)
+                stdscr.addstr(9, 2, "Would you like to download and install the update?")
+                stdscr.addstr(10, 2, "Press 'y' to update, any other key to cancel")
+                stdscr.refresh()
+                
+                key = stdscr.getch()
+                if key == ord('y') or key == ord('Y'):
+                    stdscr.clear()
+                    stdscr.addstr(1, 2, "Downloading Update")
+                    stdscr.addstr(2, 2, "=" * 18)
+                    stdscr.addstr(4, 2, "Downloading and installing update...")
+                    stdscr.refresh()
+                    
+                    success, message = self.manager.download_update()
+                    if success:
+                        self._show_message(stdscr, "Success", f"{message}\n\nPlease restart the application.")
+                    else:
+                        self._show_message(stdscr, "Error", f"Update failed: {message}")
+                else:
+                    self._show_message(stdscr, "Cancelled", "Update cancelled")
+            else:
+                stdscr.addstr(7, 2, "You are running the latest version!", curses.A_BOLD)
+                stdscr.addstr(9, 2, "Press any key to continue...")
+                stdscr.refresh()
+                stdscr.getch()
+                
+        except Exception as e:
+            self._show_message(stdscr, "Error", f"Failed to check for updates: {e}")
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
@@ -1507,7 +1754,31 @@ def main():
                 sys.exit(1)
         
         manager = VPSManager()
+        
+        # Check for updates if auto-update is enabled
+        if manager.auto_update_check() and not manager.is_first_run():
+            try:
+                has_update, current_version, latest_version = manager.check_for_updates()
+                if has_update:
+                    print(f"\nUpdate available: v{current_version} -> v{latest_version}")
+                    response = input("Would you like to download and install the update? (y/N): ")
+                    if response.lower() in ['y', 'yes']:
+                        success, message = manager.download_update()
+                        print(f"\n{message}")
+                        if success:
+                            print("Please restart the application to use the new version.")
+                            sys.exit(0)
+                    else:
+                        print("Update skipped. You can update later from the settings menu.")
+            except Exception as e:
+                Logger.error(f"Auto-update check failed: {e}")
+        
         ui = TerminalUI(manager)
+        
+        # Check for selective onboarding (new config options after updates)
+        if not manager.is_first_run() and manager.needs_selective_onboarding():
+            manager.run_selective_onboarding(ui)
+        
         ui.run()
         
     except KeyboardInterrupt:

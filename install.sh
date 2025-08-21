@@ -57,14 +57,41 @@ mkdir -p "$MANAGER_DIR/templates"
 mkdir -p "$MANAGER_DIR/backups"
 mkdir -p "$MANAGER_DIR/custom-configs"
 
-# Copy files to manager directory (only if not already there)
-log "Copying manager files..."
+# Move files to manager directory (only if not already there)
+log "Moving manager files..."
 if [ "$(pwd)" != "$MANAGER_DIR" ]; then
-    cp vps-manager.py "$MANAGER_DIR/" 2>/dev/null || log "vps-manager.py already exists in target directory"
-    cp default.conf "$MANAGER_DIR/templates/" 2>/dev/null || log "default.conf already exists in target directory"
-    cp requirements.txt "$MANAGER_DIR/" 2>/dev/null || log "requirements.txt already exists in target directory"
+    # Move main files
+    if [ -f "vps-manager.py" ] && [ ! -f "$MANAGER_DIR/vps-manager.py" ]; then
+        mv vps-manager.py "$MANAGER_DIR/"
+        log "Moved vps-manager.py to $MANAGER_DIR"
+    elif [ -f "vps-manager.py" ]; then
+        log "vps-manager.py already exists in target directory, removing source"
+        rm -f vps-manager.py
+    fi
+    
+    if [ -f "default.conf" ] && [ ! -f "$MANAGER_DIR/templates/default.conf" ]; then
+        mv default.conf "$MANAGER_DIR/templates/"
+        log "Moved default.conf to $MANAGER_DIR/templates"
+    elif [ -f "default.conf" ]; then
+        log "default.conf already exists in target directory, removing source"
+        rm -f default.conf
+    fi
+    
+    if [ -f "requirements.txt" ] && [ ! -f "$MANAGER_DIR/requirements.txt" ]; then
+        mv requirements.txt "$MANAGER_DIR/"
+        log "Moved requirements.txt to $MANAGER_DIR"
+    elif [ -f "requirements.txt" ]; then
+        log "requirements.txt already exists in target directory, removing source"
+        rm -f requirements.txt
+    fi
+    
+    # Move install.sh itself to manager directory
+    if [ -f "install.sh" ] && [ ! -f "$MANAGER_DIR/install.sh" ]; then
+        mv install.sh "$MANAGER_DIR/"
+        log "Moved install.sh to $MANAGER_DIR"
+    fi
 else
-    log "Already running from manager directory, skipping file copy"
+    log "Already running from manager directory, skipping file move"
 fi
 
 # Set proper permissions
