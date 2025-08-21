@@ -17,6 +17,7 @@ import shutil
 import re
 import tempfile
 import socket
+import signal
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -167,9 +168,37 @@ class VPSManager:
             return False, str(e)
     
     def validate_domain(self, domain: str) -> bool:
-        """Validate domain name format"""
-        pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
-        return bool(re.match(pattern, domain)) and len(domain) <= 253
+        """Validate domain name format including full subdomain support"""
+        if not domain or len(domain) > 253:
+            return False
+        
+        # Allow localhost for development
+        if domain.lower() == 'localhost':
+            return True
+        
+        # Split domain into parts
+        parts = domain.split('.')
+        
+        # Must have at least 2 parts for a valid domain (e.g., example.com)
+        # But allow single part for development (e.g., localhost, internal names)
+        if len(parts) < 1:
+            return False
+        
+        # Validate each part
+        for part in parts:
+            if not part:  # Empty part (consecutive dots)
+                return False
+            if len(part) > 63:  # Each label max 63 chars
+                return False
+            if part.startswith('-') or part.endswith('-'):  # Can't start/end with hyphen
+                return False
+            if not re.match(r'^[a-zA-Z0-9-]+$', part):  # Only alphanumeric and hyphens
+                return False
+        
+        # Additional validation for full domain format
+        # Supports multi-level subdomains like api.v1.subdomain.example.com
+        full_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+        return bool(re.match(full_pattern, domain))
     
     def validate_port(self, port: int) -> bool:
         """Validate port number"""
@@ -610,6 +639,7 @@ class TerminalUI:
         """Main UI loop"""
         curses.curs_set(0)  # Hide cursor
         stdscr.keypad(True)  # Enable special keys
+        stdscr.timeout(100)  # Set timeout for non-blocking input
         
         while True:
             stdscr.clear()
@@ -620,7 +650,16 @@ class TerminalUI:
             
             key = stdscr.getch()
             
-            if key == curses.KEY_UP and self.current_selection > 0:
+            # Handle exit shortcuts
+            if key == 3:  # Ctrl+C
+                break
+            elif key == 24:  # Ctrl+X
+                break
+            elif key == 27:  # ESC
+                break
+            elif key == ord('q') or key == ord('Q'):  # Q key for quit
+                break
+            elif key == curses.KEY_UP and self.current_selection > 0:
                 self.current_selection -= 1
             elif key == curses.KEY_DOWN and self.current_selection < len(self.menu_items) - 1:
                 self.current_selection += 1
@@ -629,6 +668,8 @@ class TerminalUI:
                     break
                 else:
                     self._handle_menu_selection(stdscr)
+            elif key == -1:  # Timeout, continue loop
+                continue
     
     def _draw_header(self, stdscr):
         """Draw the header"""
@@ -652,7 +693,7 @@ class TerminalUI:
         """Draw the footer"""
         footer_y = curses.LINES - 3
         stdscr.addstr(footer_y, 2, "=" * 60)
-        stdscr.addstr(footer_y + 1, 2, "Use ↑/↓ to navigate, Enter/Space to select")
+        stdscr.addstr(footer_y + 1, 2, "↑/↓: Navigate | Enter/Space: Select | ESC/Ctrl+C/Ctrl+X/Q: Exit")
     
     def _handle_menu_selection(self, stdscr):
         """Handle menu selection"""
@@ -678,19 +719,59 @@ class TerminalUI:
             self._settings_menu(stdscr)
     
     def _get_input(self, stdscr, prompt: str, y: int, x: int, default: str = "") -> str:
-        """Get user input with prompt"""
-        curses.echo()
+        """Get user input with prompt and exit handling"""
         curses.curs_set(1)
         stdscr.addstr(y, x, f"{prompt}: ")
         if default:
             stdscr.addstr(y, x + len(prompt) + 2, default)
+        stdscr.addstr(y + 1, x, "(Press ESC, Ctrl+C, or Ctrl+X to cancel)")
         stdscr.refresh()
         
-        # Get input
-        input_str = stdscr.getstr(y, x + len(prompt) + 2, 50).decode('utf-8')
+        # Manual input handling for exit shortcuts
+        input_str = ""
+        cursor_pos = len(default)
         
-        curses.noecho()
+        if default:
+            input_str = default
+        
+        while True:
+            # Position cursor
+            stdscr.move(y, x + len(prompt) + 2 + cursor_pos)
+            curses.curs_set(1)
+            
+            key = stdscr.getch()
+            
+            # Handle exit shortcuts
+            if key == 27 or key == 3 or key == 24:  # ESC, Ctrl+C, Ctrl+X
+                curses.curs_set(0)
+                return None  # Signal cancellation
+            elif key == ord('\n'):  # Enter
+                break
+            elif key == curses.KEY_BACKSPACE or key == 127 or key == 8:  # Backspace
+                if cursor_pos > 0:
+                    input_str = input_str[:cursor_pos-1] + input_str[cursor_pos:]
+                    cursor_pos -= 1
+                    # Clear and redraw line
+                    stdscr.move(y, x + len(prompt) + 2)
+                    stdscr.clrtoeol()
+                    stdscr.addstr(y, x + len(prompt) + 2, input_str)
+            elif key == curses.KEY_LEFT and cursor_pos > 0:
+                cursor_pos -= 1
+            elif key == curses.KEY_RIGHT and cursor_pos < len(input_str):
+                cursor_pos += 1
+            elif 32 <= key <= 126 and len(input_str) < 50:  # Printable characters
+                char = chr(key)
+                input_str = input_str[:cursor_pos] + char + input_str[cursor_pos:]
+                cursor_pos += 1
+                # Clear and redraw line
+                stdscr.move(y, x + len(prompt) + 2)
+                stdscr.clrtoeol()
+                stdscr.addstr(y, x + len(prompt) + 2, input_str)
+        
         curses.curs_set(0)
+        # Clear the cancel instruction line
+        stdscr.move(y + 1, x)
+        stdscr.clrtoeol()
         
         return input_str if input_str else default
     
@@ -821,13 +902,17 @@ class TerminalUI:
         
         try:
             # Get domain name
-            domain_name = self._get_input(stdscr, "Domain name (e.g., example.com)", 4, 2)
+            domain_name = self._get_input(stdscr, "Domain name (e.g., api.v1.example.com)", 4, 2)
+            if domain_name is None:  # User cancelled
+                return
             if not domain_name:
                 self._show_message(stdscr, "Error", "Domain name is required.", True)
                 return
             
             # Get port
             port_str = self._get_input(stdscr, "Backend port (e.g., 3000)", 5, 2)
+            if port_str is None:  # User cancelled
+                return
             try:
                 port = int(port_str)
             except ValueError:
@@ -837,10 +922,14 @@ class TerminalUI:
             # Get SSL preference (use configured default)
             default_ssl = 'y' if self.manager.config.get('default_ssl', True) else 'n'
             ssl_choice = self._get_input(stdscr, f"Enable SSL? ({'Y/n' if default_ssl == 'y' else 'y/N'})", 6, 2, default_ssl)
+            if ssl_choice is None:  # User cancelled
+                return
             ssl_enabled = ssl_choice.lower() in ['y', 'yes']
             
             # Get custom config preference
             custom_choice = self._get_input(stdscr, "Use custom config? (y/N)", 7, 2, "n")
+            if custom_choice is None:  # User cancelled
+                return
             custom_config = None
             
             if custom_choice.lower() in ['y', 'yes']:
@@ -913,8 +1002,14 @@ class TerminalUI:
             
             # Get new values
             new_name = self._get_input(stdscr, f"Domain name ({domain.name})", 6, 2)
+            if new_name is None:  # User cancelled
+                return
             new_port_str = self._get_input(stdscr, f"Port ({domain.port})", 7, 2)
+            if new_port_str is None:  # User cancelled
+                return
             new_ssl_str = self._get_input(stdscr, f"SSL ({'Yes' if domain.ssl else 'No'})", 8, 2)
+            if new_ssl_str is None:  # User cancelled
+                return
             
             # Process inputs
             new_port = None
@@ -1205,6 +1300,8 @@ class TerminalUI:
         stdscr.addstr(7, 2, "Leave empty to use domain-specific emails (admin@domain.com)")
         
         email = self._get_input(stdscr, "Email address", 9, 2)
+        if email is None:  # User cancelled
+            return
         if email:
             self.manager.config['certbot_email'] = email
         
@@ -1215,6 +1312,8 @@ class TerminalUI:
         stdscr.addstr(4, 2, "Would you like to enable automatic backups before making changes?")
         
         auto_backup = self._get_input(stdscr, "Enable auto-backup? (y/N)", 6, 2, "y")
+        if auto_backup is None:  # User cancelled
+            return
         self.manager.config['auto_backup'] = auto_backup.lower() in ['y', 'yes']
         
         # Ask about default SSL
@@ -1224,6 +1323,8 @@ class TerminalUI:
         stdscr.addstr(4, 2, "Would you like SSL to be enabled by default for new domains?")
         
         default_ssl = self._get_input(stdscr, "Enable SSL by default? (Y/n)", 6, 2, "y")
+        if default_ssl is None:  # User cancelled
+            return
         self.manager.config['default_ssl'] = default_ssl.lower() not in ['n', 'no']
         
         # Summary and confirmation
@@ -1316,6 +1417,8 @@ class TerminalUI:
         stdscr.addstr(6, 2, "Leave empty to use domain-specific emails")
         
         new_email = self._get_input(stdscr, "New email address", 8, 2)
+        if new_email is None:  # User cancelled
+            return
         
         if new_email:
             self.manager.config['certbot_email'] = new_email
@@ -1384,13 +1487,24 @@ class TerminalUI:
             self.manager.save_config()
             self._show_message(stdscr, "Success", "Settings reset to defaults")
 
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    print("\nShutting down gracefully...")
+    sys.exit(0)
+
 def main():
     """Main entry point"""
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     try:
-        # Check if running as root (required for nginx operations)
-        if os.geteuid() != 0:
-            print("This script must be run as root (sudo) to manage NGINX configurations.")
-            sys.exit(1)
+        # Check if running as root/administrator (required for nginx operations)
+        # Skip this check on Windows for development/testing
+        if os.name != 'nt':  # Not Windows
+            if hasattr(os, 'geteuid') and os.geteuid() != 0:
+                print("This script must be run as root (sudo) to manage NGINX configurations.")
+                sys.exit(1)
         
         manager = VPSManager()
         ui = TerminalUI(manager)

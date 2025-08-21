@@ -57,20 +57,50 @@ mkdir -p "$MANAGER_DIR/templates"
 mkdir -p "$MANAGER_DIR/backups"
 mkdir -p "$MANAGER_DIR/custom-configs"
 
-# Copy files to manager directory
+# Copy files to manager directory (only if not already there)
 log "Copying manager files..."
-cp vps-manager.py "$MANAGER_DIR/"
-cp default.conf "$MANAGER_DIR/templates/"
-cp requirements.txt "$MANAGER_DIR/"
+if [ "$(pwd)" != "$MANAGER_DIR" ]; then
+    cp vps-manager.py "$MANAGER_DIR/" 2>/dev/null || log "vps-manager.py already exists in target directory"
+    cp default.conf "$MANAGER_DIR/templates/" 2>/dev/null || log "default.conf already exists in target directory"
+    cp requirements.txt "$MANAGER_DIR/" 2>/dev/null || log "requirements.txt already exists in target directory"
+else
+    log "Already running from manager directory, skipping file copy"
+fi
 
 # Set proper permissions
 chown -R $(logname):$(logname) "$MANAGER_DIR"
 chmod +x "$MANAGER_DIR/vps-manager.py"
 
+# Detect Python interpreter
+log "Detecting Python interpreter..."
+PYTHON_CMD=""
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_CMD="python3"
+elif command -v python >/dev/null 2>&1; then
+    # Check if it's Python 3
+    if python -c "import sys; exit(0 if sys.version_info[0] == 3 else 1)" 2>/dev/null; then
+        PYTHON_CMD="python"
+    fi
+fi
+
+if [ -z "$PYTHON_CMD" ]; then
+    error "Python 3 not found. Please install Python 3."
+fi
+
+log "Using Python interpreter: $PYTHON_CMD"
+
+# Fix line endings in vps-manager.py (convert Windows CRLF to Unix LF)
+log "Fixing line endings..."
+sed -i 's/\r$//' "$MANAGER_DIR/vps-manager.py"
+
+# Update shebang to use detected Python
+log "Updating shebang line..."
+sed -i "1s|.*|#!/usr/bin/env $PYTHON_CMD|" "$MANAGER_DIR/vps-manager.py"
+
 # Install Python dependencies
 log "Installing Python dependencies..."
 cd "$MANAGER_DIR"
-pip3 install -r requirements.txt
+$PYTHON_CMD -m pip install -r requirements.txt
 
 # Create symbolic link for easy access
 log "Creating symbolic link..."
