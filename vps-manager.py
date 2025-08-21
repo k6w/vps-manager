@@ -608,6 +608,50 @@ class VPSManager:
         except Exception as e:
             Logger.error(f"Failed to backup configuration for {domain_name}: {e}")
     
+    def create_domain_backup(self, domain_name: str) -> Tuple[bool, str]:
+        """Create backup for a specific domain before making changes"""
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"domain_{domain_name}_{timestamp}"
+            backup_path = BACKUP_DIR / f"{backup_name}.tar.gz"
+            
+            # Create temporary directory for backup
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_backup_dir = Path(temp_dir) / backup_name
+                temp_backup_dir.mkdir()
+                
+                # Backup domain configuration from domains.json
+                domain = self.get_domain(domain_name)
+                if domain:
+                    domain_config_file = temp_backup_dir / "domain.json"
+                    with open(domain_config_file, 'w') as f:
+                        json.dump(domain.to_dict(), f, indent=2)
+                
+                # Backup NGINX configuration
+                nginx_config = NGINX_SITES_DIR / domain_name
+                if nginx_config.exists():
+                    shutil.copy2(nginx_config, temp_backup_dir / f"{domain_name}.conf")
+                
+                # Backup SSL certificates if they exist
+                ssl_dir = Path(f"/etc/letsencrypt/live/{domain_name}")
+                if ssl_dir.exists():
+                    ssl_backup_dir = temp_backup_dir / "ssl"
+                    ssl_backup_dir.mkdir()
+                    try:
+                        shutil.copytree(ssl_dir, ssl_backup_dir / domain_name, dirs_exist_ok=True)
+                    except PermissionError:
+                        Logger.warning(f"Could not backup SSL certificates for {domain_name} (permission denied)")
+                
+                # Create tar.gz archive
+                shutil.make_archive(str(backup_path.with_suffix('')), 'gztar', temp_dir, backup_name)
+            
+            Logger.info(f"Domain backup created: {backup_path}")
+            return True, f"Backup created successfully: {backup_path.name}"
+            
+        except Exception as e:
+            Logger.error(f"Failed to create domain backup for {domain_name}: {e}")
+            return False, str(e)
+    
     def create_full_backup(self) -> Tuple[bool, str]:
         """Create full backup of all configurations"""
         try:
