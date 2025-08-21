@@ -3,8 +3,8 @@
 VPS NGINX Domain Manager
 A comprehensive terminal-based manager for NGINX domains, SSL certificates, and configurations.
 
-Author: VPS Manager
-Version: 1.0.0
+Author: k6w
+Version: 1.2.0
 """
 
 import os
@@ -18,13 +18,14 @@ import re
 import tempfile
 import socket
 import signal
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 import urllib.request
 
 # Version and Update Configuration
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 CONFIG_VERSION = "1.1.0"  # Increment when new config options are added
 UPDATE_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/vps-manager.py"
 VERSION_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/VERSION"
@@ -922,6 +923,9 @@ class TerminalUI:
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
         
+        # Wait 1 second to let user see the message
+        time.sleep(1)
+        
         # Flush input buffer to prevent key release detection
         stdscr.nodelay(True)
         while stdscr.getch() != -1:
@@ -1670,6 +1674,9 @@ class TerminalUI:
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
         
+        # Wait 1 second to let user see the message
+        time.sleep(1)
+        
         # Flush input buffer to prevent key release detection
         stdscr.nodelay(True)
         while stdscr.getch() != -1:
@@ -1742,6 +1749,9 @@ class TerminalUI:
         
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
+        
+        # Wait 1 second to let user see the message
+        time.sleep(1)
         
         # Flush input buffer to prevent key release detection
         stdscr.nodelay(True)
