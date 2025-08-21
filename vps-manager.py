@@ -24,8 +24,8 @@ from urllib.parse import urlparse
 import urllib.request
 
 # Version and Update Configuration
-VERSION = "1.2.2"
-CONFIG_VERSION = "1.2.2"  # Increment when new config options are added
+VERSION = "1.2.3"
+CONFIG_VERSION = "1.2.3"  # Increment when new config options are added
 UPDATE_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/vps-manager.py"
 VERSION_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/VERSION"
 
