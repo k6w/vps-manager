@@ -59,6 +59,10 @@ A comprehensive terminal-based manager for Ubuntu 24.04 VPS that simplifies NGIN
    vps-manager
    ```
 
+## How It Works
+
+**Important**: This VPS Manager creates individual configuration files for each domain in `/etc/nginx/sites-available/` and `/etc/nginx/sites-enabled/`. It **does NOT modify** your main `nginx.conf` file. Each domain gets its own configuration file (e.g., `managed-example.com.conf`) that can be independently managed without affecting other sites or the main NGINX configuration.
+
 ## Usage Guide
 
 ### Main Menu Navigation
@@ -250,15 +254,17 @@ curl http://localhost:3000
 ### Recovery Commands
 
 ```bash
-# Restore NGINX default configuration
-sudo cp /etc/nginx/nginx.conf.backup /etc/nginx/nginx.conf
-
 # Remove all manager configurations
 sudo rm /etc/nginx/sites-enabled/managed-*
+sudo rm /etc/nginx/sites-available/managed-*
 sudo systemctl reload nginx
 
 # Reset manager data
 rm ~/manager/domains.json
+rm ~/manager/config.json
+
+# Clear manager logs
+rm ~/manager/logs/manager.log
 ```
 
 ## Security Best Practices

@@ -98,18 +98,16 @@ EOF
 # Reload systemd
 systemctl daemon-reload
 
-# Create backup of original nginx configuration
-log "Creating backup of original NGINX configuration..."
-cp /etc/nginx/nginx.conf "$MANAGER_DIR/backups/nginx.conf.original.$(date +%Y%m%d_%H%M%S)"
-
 # Ensure sites-available and sites-enabled directories exist
+log "Ensuring NGINX sites directories exist..."
 mkdir -p /etc/nginx/sites-available
 mkdir -p /etc/nginx/sites-enabled
 
-# Check if sites-enabled is included in nginx.conf
+# Check if sites-enabled is included in nginx.conf (but don't modify it)
 if ! grep -q "sites-enabled" /etc/nginx/nginx.conf; then
-    log "Adding sites-enabled include to nginx.conf..."
-    sed -i '/http {/a\    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf
+    warn "sites-enabled directory is not included in nginx.conf"
+    warn "You may need to manually add 'include /etc/nginx/sites-enabled/*;' to your nginx.conf"
+    warn "This is typically found in the http block of /etc/nginx/nginx.conf"
 fi
 
 # Test NGINX configuration
