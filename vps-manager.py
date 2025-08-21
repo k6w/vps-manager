@@ -227,6 +227,45 @@ class VPSManager:
         except Exception:
             return False
     
+    def get_external_ip(self) -> str:
+        """Get the external IP address of the VPS"""
+        try:
+            # Try multiple services to get external IP
+            services = [
+                'https://ipv4.icanhazip.com',
+                'https://api.ipify.org',
+                'https://checkip.amazonaws.com'
+            ]
+            
+            for service in services:
+                try:
+                    import urllib.request
+                    with urllib.request.urlopen(service, timeout=5) as response:
+                        ip = response.read().decode('utf-8').strip()
+                        # Validate IP format
+                        import re
+                        if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
+                            Logger.info(f"External IP detected: {ip}")
+                            return ip
+                except Exception as e:
+                    Logger.warning(f"Failed to get IP from {service}: {e}")
+                    continue
+            
+            # Fallback: try to get IP from network interface
+            success, output = self.run_command("hostname -I | awk '{print $1}'")
+            if success and output.strip():
+                ip = output.strip()
+                if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
+                    Logger.info(f"Local IP detected: {ip}")
+                    return ip
+            
+            Logger.warning("Could not determine external IP, falling back to 127.0.0.1")
+            return "127.0.0.1"
+            
+        except Exception as e:
+            Logger.error(f"Error getting external IP: {e}")
+            return "127.0.0.1"
+    
     def domain_exists(self, domain_name: str) -> bool:
         """Check if domain already exists"""
         return any(d.name == domain_name for d in self.domains)
@@ -407,10 +446,14 @@ class VPSManager:
             ssl_cert_path = f"/etc/letsencrypt/live/{domain.name}/fullchain.pem"
             ssl_key_path = f"/etc/letsencrypt/live/{domain.name}/privkey.pem"
             
+            # Get backend IP (use external VPS IP instead of 127.0.0.1 for Docker compatibility)
+            backend_ip = self.get_external_ip() or "127.0.0.1"
+            
             config_content = template_content.replace('$DOMAIN', domain.name)
             config_content = config_content.replace('$PORT', str(domain.port))
             config_content = config_content.replace('$SSL_CERT_PATH', ssl_cert_path)
             config_content = config_content.replace('$SSL_KEY_PATH', ssl_key_path)
+            config_content = config_content.replace('$BACKEND_IP', backend_ip)
             
             # If SSL is disabled, use only HTTP configuration
             if not domain.ssl:

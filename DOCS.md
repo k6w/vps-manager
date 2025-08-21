@@ -8,6 +8,7 @@ The VPS Manager uses a template system for NGINX configurations. You can use the
 
 - `$DOMAIN` - The domain name (e.g., `example.com`)
 - `$PORT` - The backend port number (e.g., `3000`)
+- `$BACKEND_IP` - The backend IP address (automatically detected VPS IP for Docker compatibility)
 - `$SSL_CERT_PATH` - Path to SSL certificate file
 - `$SSL_KEY_PATH` - Path to SSL private key file
 - `$MANAGER_DIR` - Path to the manager directory (`~/manager`)

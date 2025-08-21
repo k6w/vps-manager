@@ -183,6 +183,7 @@ server {
 
 - `$DOMAIN` - Domain name
 - `$PORT` - Backend port
+- `$BACKEND_IP` - Backend IP address (automatically detected VPS IP for Docker compatibility)
 - `$SSL_CERT_PATH` - SSL certificate path
 - `$SSL_KEY_PATH` - SSL private key path
 
