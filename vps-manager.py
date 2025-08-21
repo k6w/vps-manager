@@ -26,8 +26,8 @@ import urllib.request
 # Version and Update Configuration
 VERSION = "1.2.0"
 CONFIG_VERSION = "1.1.0"  # Increment when new config options are added
-UPDATE_URL = "https://raw.githubusercontent.com/your-repo/vps-manager/main/vps-manager.py"
-VERSION_URL = "https://raw.githubusercontent.com/your-repo/vps-manager/main/VERSION"
+UPDATE_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/vps-manager.py"
+VERSION_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/VERSION"
 
 # Configuration
 MANAGER_DIR = Path.home() / "manager"
@@ -1750,8 +1750,8 @@ class TerminalUI:
         stdscr.nodelay(False)
         
         stdscr.getch()
-     
-     def _manual_update_check(self, stdscr):
+    
+    def _manual_update_check(self, stdscr):
         """Manually check for updates"""
         stdscr.clear()
         stdscr.addstr(1, 2, "Checking for Updates")
