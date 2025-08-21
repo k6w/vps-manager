@@ -478,12 +478,28 @@ class VPSManager:
             source = NGINX_SITES_DIR / domain_name
             target = NGINX_ENABLED_DIR / domain_name
             
-            if target.exists():
+            # Check if source configuration exists
+            if not source.exists():
+                Logger.error(f"Source configuration file does not exist: {source}")
+                return False, f"Configuration file {source} not found"
+            
+            # Ensure sites-enabled directory exists
+            NGINX_ENABLED_DIR.mkdir(parents=True, exist_ok=True)
+            
+            # Remove existing symlink if it exists
+            if target.exists() or target.is_symlink():
                 target.unlink()
             
+            # Create the symbolic link
             target.symlink_to(source)
-            Logger.info(f"Site {domain_name} enabled")
-            return True, "Site enabled successfully"
+            
+            # Verify the link was created successfully
+            if target.exists() and target.is_symlink():
+                Logger.info(f"Site {domain_name} enabled successfully")
+                return True, "Site enabled successfully"
+            else:
+                Logger.error(f"Failed to verify symbolic link for {domain_name}")
+                return False, "Failed to create symbolic link"
             
         except Exception as e:
             Logger.error(f"Failed to enable site {domain_name}: {e}")
@@ -889,6 +905,10 @@ class VPSManager:
         """Update config version to current version"""
         self.config['config_version'] = CONFIG_VERSION
         self.save_config()
+    
+
+    
+
     
     def get_missing_config_options(self) -> List[str]:
         """Get list of config options that are missing or new"""
@@ -2001,6 +2021,8 @@ def signal_handler(signum, frame):
     print("\nShutting down gracefully...")
     sys.exit(0)
 
+
+
 def run_uninstall():
     """Run the uninstall process with user prompts"""
     print("\n" + "=" * 50)
@@ -2104,6 +2126,7 @@ Examples:
     )
     parser.add_argument('--uninstall', action='store_true',
                        help='Uninstall VPS Manager completely')
+
     
     args = parser.parse_args()
     
@@ -2111,6 +2134,8 @@ Examples:
     if args.uninstall:
         run_uninstall()
         return
+    
+
     
     # Set up signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
