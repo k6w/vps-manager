@@ -18,15 +18,14 @@ import re
 import tempfile
 import socket
 import signal
-import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 import urllib.request
 
 # Version and Update Configuration
-VERSION = "1.2.1"
-CONFIG_VERSION = "1.1.0"  # Increment when new config options are added
+VERSION = "1.2.2"
+CONFIG_VERSION = "1.2.2"  # Increment when new config options are added
 UPDATE_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/vps-manager.py"
 VERSION_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/VERSION"
 
@@ -680,6 +679,129 @@ class VPSManager:
             Logger.error(f"Failed to download update: {e}")
             return False, f"Failed to download update: {e}"
     
+    def bump_version(self, bump_type: str = "patch") -> Tuple[bool, str]:
+        """Automatically bump version number
+        Args:
+            bump_type: 'major', 'minor', or 'patch'
+        Returns: (success, new_version)
+        """
+        try:
+            current_version = VERSION
+            major, minor, patch = map(int, current_version.split('.'))
+            
+            if bump_type == "major":
+                major += 1
+                minor = 0
+                patch = 0
+            elif bump_type == "minor":
+                minor += 1
+                patch = 0
+            elif bump_type == "patch":
+                patch += 1
+            else:
+                return False, f"Invalid bump type: {bump_type}"
+            
+            new_version = f"{major}.{minor}.{patch}"
+            
+            # Update VERSION constant in the script
+            success = self._update_version_in_file(new_version)
+            if not success:
+                return False, "Failed to update version in script"
+            
+            # Update VERSION file
+            version_file = Path(__file__).parent / "VERSION"
+            with open(version_file, 'w') as f:
+                f.write(new_version)
+            
+            Logger.info(f"Version bumped from {current_version} to {new_version}")
+            return True, new_version
+            
+        except Exception as e:
+            Logger.error(f"Failed to bump version: {e}")
+            return False, f"Failed to bump version: {e}"
+    
+    def _update_version_in_file(self, new_version: str) -> bool:
+        """Update the VERSION constant in the script file"""
+        try:
+            script_path = Path(__file__)
+            with open(script_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Replace VERSION constant
+            import re
+            pattern = r'VERSION = "[0-9]+\.[0-9]+\.[0-9]+"'
+            replacement = f'VERSION = "{new_version}"'
+            new_content = re.sub(pattern, replacement, content)
+            
+            if new_content == content:
+                return False  # No replacement made
+            
+            # Create backup before modifying
+            backup_path = script_path.parent / f"vps-manager.py.backup.{VERSION}"
+            shutil.copy2(script_path, backup_path)
+            
+            # Write updated content
+            with open(script_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            
+            return True
+            
+        except Exception as e:
+            Logger.error(f"Failed to update version in file: {e}")
+            return False
+    
+    def validate_version_consistency(self) -> Tuple[bool, str]:
+        """Check if VERSION constant matches VERSION file
+        Returns: (is_consistent, message)
+        """
+        try:
+            version_file = Path(__file__).parent / "VERSION"
+            if not version_file.exists():
+                return False, "VERSION file does not exist"
+            
+            with open(version_file, 'r') as f:
+                file_version = f.read().strip()
+            
+            script_version = VERSION
+            
+            if file_version == script_version:
+                return True, f"Version consistency OK: {script_version}"
+            else:
+                return False, f"Version mismatch - Script: {script_version}, File: {file_version}"
+                
+        except Exception as e:
+            Logger.error(f"Failed to validate version consistency: {e}")
+            return False, f"Failed to validate version consistency: {e}"
+    
+    def is_valid_version(self, version: str) -> bool:
+        """Check if version string follows semantic versioning (x.y.z)"""
+        try:
+            parts = version.split('.')
+            if len(parts) != 3:
+                return False
+            
+            for part in parts:
+                if not part.isdigit() or int(part) < 0:
+                    return False
+            
+            return True
+        except:
+            return False
+    
+    def sync_version_file(self) -> Tuple[bool, str]:
+        """Sync VERSION file with script VERSION constant"""
+        try:
+            version_file = Path(__file__).parent / "VERSION"
+            with open(version_file, 'w') as f:
+                f.write(VERSION)
+            
+            Logger.info(f"VERSION file synced with script version: {VERSION}")
+            return True, f"VERSION file updated to {VERSION}"
+            
+        except Exception as e:
+            Logger.error(f"Failed to sync VERSION file: {e}")
+            return False, f"Failed to sync VERSION file: {e}"
+    
     def auto_update_check(self) -> bool:
         """Check if auto-update is enabled in config"""
         return self.config.get('auto_update', False)
@@ -793,7 +915,7 @@ class TerminalUI:
     
     def _draw_header(self, stdscr):
         """Draw the header"""
-        header = "VPS NGINX Domain Manager v1.0.0"
+        header = f"VPS NGINX Domain Manager v{VERSION}"
         stdscr.addstr(1, 2, "=" * 60)
         stdscr.addstr(2, 2, header.center(56))
         stdscr.addstr(3, 2, "=" * 60)
@@ -922,9 +1044,6 @@ class TerminalUI:
         
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
-        
-        # Wait 1 second to let user see the message
-        time.sleep(1)
         
         # Flush input buffer to prevent key release detection
         stdscr.nodelay(True)
@@ -1674,9 +1793,6 @@ class TerminalUI:
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
         
-        # Wait 1 second to let user see the message
-        time.sleep(1)
-        
         # Flush input buffer to prevent key release detection
         stdscr.nodelay(True)
         while stdscr.getch() != -1:
@@ -1749,9 +1865,6 @@ class TerminalUI:
         
         stdscr.addstr(curses.LINES - 2, 2, "Press any key to continue...")
         stdscr.refresh()
-        
-        # Wait 1 second to let user see the message
-        time.sleep(1)
         
         # Flush input buffer to prevent key release detection
         stdscr.nodelay(True)
