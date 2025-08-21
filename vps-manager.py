@@ -18,6 +18,7 @@ import re
 import tempfile
 import socket
 import signal
+import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -30,7 +31,11 @@ UPDATE_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/vps-manager
 VERSION_URL = "https://raw.githubusercontent.com/k6w/vps-manager/main/VERSION"
 
 # Configuration
-MANAGER_DIR = Path.home() / "manager"
+# Use the actual user's home directory, not root's home when running with sudo
+if os.environ.get('SUDO_USER'):
+    MANAGER_DIR = Path(f"/home/{os.environ['SUDO_USER']}") / "manager"
+else:
+    MANAGER_DIR = Path.home() / "manager"
 NGINX_SITES_DIR = Path("/etc/nginx/sites-available")
 NGINX_ENABLED_DIR = Path("/etc/nginx/sites-enabled")
 BACKUP_DIR = MANAGER_DIR / "backups"
@@ -615,6 +620,76 @@ class VPSManager:
                 backups.append(backup_file.name)
         
         return sorted(backups, reverse=True)  # Most recent first
+    
+    def uninstall_manager(self, delete_ssl: bool = False, delete_domains: bool = False) -> Tuple[bool, str]:
+        """Uninstall VPS Manager completely"""
+        try:
+            Logger.info("Starting VPS Manager uninstall process")
+            
+            # Stop and disable systemd service if it exists
+            service_file = Path("/etc/systemd/system/vps-manager.service")
+            if service_file.exists():
+                Logger.info("Stopping and disabling systemd service")
+                self.run_command("systemctl stop vps-manager")
+                self.run_command("systemctl disable vps-manager")
+                service_file.unlink()
+                self.run_command("systemctl daemon-reload")
+            
+            # Remove symbolic link
+            symlink_path = Path("/usr/local/bin/vps-manager")
+            if symlink_path.exists():
+                Logger.info("Removing symbolic link")
+                symlink_path.unlink()
+            
+            # Handle SSL certificates if requested
+            if delete_ssl:
+                Logger.info("Removing SSL certificates")
+                for domain in self.domains:
+                    if domain.ssl:
+                        cert_path = f"/etc/letsencrypt/live/{domain.name}"
+                        if Path(cert_path).exists():
+                            success, output = self.run_command(f"certbot delete --cert-name {domain.name} --non-interactive")
+                            if success:
+                                Logger.info(f"Removed SSL certificate for {domain.name}")
+                            else:
+                                Logger.warning(f"Failed to remove SSL certificate for {domain.name}: {output}")
+            
+            # Handle domain configurations if requested
+            if delete_domains:
+                Logger.info("Removing domain configurations")
+                for domain in self.domains:
+                    # Remove NGINX site configuration
+                    site_file = NGINX_SITES_DIR / domain.name
+                    enabled_file = NGINX_ENABLED_DIR / domain.name
+                    
+                    if enabled_file.exists():
+                        enabled_file.unlink()
+                        Logger.info(f"Removed enabled site for {domain.name}")
+                    
+                    if site_file.exists():
+                        site_file.unlink()
+                        Logger.info(f"Removed site configuration for {domain.name}")
+                
+                # Reload NGINX after removing configurations
+                success, output = self.run_command("nginx -t")
+                if success:
+                    self.run_command("systemctl reload nginx")
+                    Logger.info("NGINX reloaded successfully")
+                else:
+                    Logger.warning(f"NGINX configuration test failed: {output}")
+            
+            # Remove manager directory and all its contents
+            if MANAGER_DIR.exists():
+                Logger.info(f"Removing manager directory: {MANAGER_DIR}")
+                shutil.rmtree(MANAGER_DIR)
+            
+            Logger.info("VPS Manager uninstall completed successfully")
+            return True, "VPS Manager has been uninstalled successfully."
+            
+        except Exception as e:
+            error_msg = f"Failed to uninstall VPS Manager: {e}"
+            Logger.error(error_msg)
+            return False, error_msg
     
     def check_for_updates(self) -> Tuple[bool, str, str]:
         """Check if updates are available
@@ -1926,8 +2001,117 @@ def signal_handler(signum, frame):
     print("\nShutting down gracefully...")
     sys.exit(0)
 
+def run_uninstall():
+    """Run the uninstall process with user prompts"""
+    print("\n" + "=" * 50)
+    print("VPS Manager Uninstall")
+    print("=" * 50)
+    print("\nThis will completely remove VPS Manager from your system.")
+    print("\nThe following will be removed:")
+    print("• VPS Manager application files")
+    print("• Systemd service")
+    print("• Symbolic links")
+    print("• Configuration files and logs")
+    
+    # Confirm uninstall
+    try:
+        confirm = input("\nDo you want to proceed with the uninstall? (y/N): ").strip().lower()
+        if confirm not in ['y', 'yes']:
+            print("Uninstall cancelled.")
+            return
+        
+        # Initialize manager to access domains and uninstall method
+        manager = VPSManager()
+        
+        # Check if there are any domains configured
+        delete_ssl = False
+        delete_domains = False
+        
+        if manager.domains:
+            print(f"\nFound {len(manager.domains)} configured domain(s):")
+            for domain in manager.domains:
+                ssl_status = "(SSL enabled)" if domain.ssl else "(SSL disabled)"
+                print(f"  • {domain.name} {ssl_status}")
+            
+            # Ask about SSL certificates
+            ssl_domains = [d for d in manager.domains if d.ssl]
+            if ssl_domains:
+                print(f"\nFound {len(ssl_domains)} domain(s) with SSL certificates.")
+                ssl_choice = input("Do you want to delete SSL certificates? (y/N): ").strip().lower()
+                delete_ssl = ssl_choice in ['y', 'yes']
+                
+                if delete_ssl:
+                    print("⚠️  SSL certificates will be permanently deleted!")
+                else:
+                    print("SSL certificates will be preserved.")
+            
+            # Ask about domain configurations
+            print(f"\nFound {len(manager.domains)} NGINX domain configuration(s).")
+            domain_choice = input("Do you want to delete domain configurations? (y/N): ").strip().lower()
+            delete_domains = domain_choice in ['y', 'yes']
+            
+            if delete_domains:
+                print("⚠️  Domain configurations will be permanently deleted!")
+            else:
+                print("Domain configurations will be preserved.")
+        
+        # Final confirmation
+        print("\n" + "-" * 50)
+        print("UNINSTALL SUMMARY:")
+        print(f"• Remove VPS Manager: YES")
+        print(f"• Delete SSL certificates: {'YES' if delete_ssl else 'NO'}")
+        print(f"• Delete domain configurations: {'YES' if delete_domains else 'NO'}")
+        print("-" * 50)
+        
+        final_confirm = input("\nProceed with uninstall? (y/N): ").strip().lower()
+        if final_confirm not in ['y', 'yes']:
+            print("Uninstall cancelled.")
+            return
+        
+        # Perform uninstall
+        print("\nUninstalling VPS Manager...")
+        success, message = manager.uninstall_manager(delete_ssl, delete_domains)
+        
+        if success:
+            print(f"\n✅ {message}")
+            if not delete_ssl and ssl_domains:
+                print("\n📋 Note: SSL certificates were preserved and can be managed manually with certbot.")
+            if not delete_domains and manager.domains:
+                print("📋 Note: Domain configurations were preserved in /etc/nginx/sites-available/.")
+            print("\nThank you for using VPS Manager!")
+        else:
+            print(f"\n❌ {message}")
+            sys.exit(1)
+            
+    except KeyboardInterrupt:
+        print("\n\nUninstall cancelled by user.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ An error occurred during uninstall: {e}")
+        sys.exit(1)
+
 def main():
     """Main entry point"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='VPS NGINX Domain Manager',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  %(prog)s                    # Start interactive manager
+  %(prog)s --uninstall        # Uninstall VPS Manager
+'''
+    )
+    parser.add_argument('--uninstall', action='store_true',
+                       help='Uninstall VPS Manager completely')
+    
+    args = parser.parse_args()
+    
+    # Handle uninstall
+    if args.uninstall:
+        run_uninstall()
+        return
+    
     # Set up signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

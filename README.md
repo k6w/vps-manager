@@ -59,6 +59,27 @@ A comprehensive terminal-based manager for Ubuntu 24.04 VPS that simplifies NGIN
    vps-manager
    ```
 
+## Uninstalling
+
+To completely remove VPS Manager from your system:
+
+```bash
+sudo vps-manager --uninstall
+```
+
+**The uninstall process will:**
+- Remove all VPS Manager files and directories
+- Stop and remove the systemd service
+- Remove symbolic links
+- Optionally delete SSL certificates (user choice)
+- Optionally delete domain configurations (user choice)
+
+**Interactive prompts will ask you:**
+- Whether to delete SSL certificates (default: NO)
+- Whether to delete domain configurations (default: NO)
+
+**Note:** By default, your SSL certificates and domain configurations are preserved, allowing you to manage them manually or reinstall VPS Manager later without losing your setup.
+
 ## How It Works
 
 **Important**: This VPS Manager creates individual configuration files for each domain in `/etc/nginx/sites-available/` and `/etc/nginx/sites-enabled/`. It **does NOT modify** your main `nginx.conf` file. Each domain gets its own configuration file (e.g., `managed-example.com.conf`) that can be independently managed without affecting other sites or the main NGINX configuration.
@@ -196,6 +217,9 @@ vps-manager --debug
 
 # Run in batch mode (no UI)
 vps-manager --batch --add-domain example.com --port 3000 --ssl
+
+# Uninstall VPS Manager completely
+sudo vps-manager --uninstall
 ```
 
 ### Environment Variables

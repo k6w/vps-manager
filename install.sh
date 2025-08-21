@@ -50,7 +50,14 @@ if ! systemctl is-active --quiet nginx; then
 fi
 
 # Create manager directory
-MANAGER_DIR="/home/$(logname)/manager"
+# Determine the target user directory
+if [ -n "$SUDO_USER" ]; then
+    TARGET_USER="$SUDO_USER"
+    MANAGER_DIR="/home/$SUDO_USER/manager"
+else
+    TARGET_USER="$(logname)"
+    MANAGER_DIR="/home/$(logname)/manager"
+fi
 log "Creating manager directory at $MANAGER_DIR..."
 mkdir -p "$MANAGER_DIR"
 mkdir -p "$MANAGER_DIR/templates"
@@ -95,7 +102,7 @@ else
 fi
 
 # Set proper permissions
-chown -R $(logname):$(logname) "$MANAGER_DIR"
+chown -R $TARGET_USER:$TARGET_USER "$MANAGER_DIR"
 chmod +x "$MANAGER_DIR/vps-manager.py"
 
 # Detect Python interpreter
@@ -208,6 +215,9 @@ sudo /home/$(whoami)/manager/vps-manager.py
 # Or use the symbolic link
 sudo vps-manager
 
+# Uninstall VPS Manager completely
+sudo vps-manager --uninstall
+
 # Manual activation of virtual environment (if needed)
 cd /home/$(whoami)/manager
 source venv/bin/activate
@@ -278,7 +288,7 @@ Available variables for NGINX configurations:
 EOF
 
 # Set final permissions
-chown $(logname):$(logname) "$MANAGER_DIR/README.md"
+chown $TARGET_USER:$TARGET_USER "$MANAGER_DIR/README.md"
 
 log "Installation completed successfully!"
 log ""
