@@ -297,26 +297,37 @@ class VPSManager:
             # Create domain object
             domain = Domain(name, port, ssl, custom_config)
             
-            # Generate NGINX configuration
-            success, message = self.generate_nginx_config(domain)
+            # Generate initial NGINX configuration (HTTP-only if SSL is needed)
+            temp_http_only = ssl  # Use HTTP-only config initially if SSL is requested
+            success, message = self.generate_nginx_config(domain, temp_http_only)
             if not success:
                 return False, f"Failed to generate NGINX config: {message}"
-            
-            # Generate SSL certificate if needed
-            if ssl:
-                success, message = self.generate_ssl_certificate(name)
-                if not success:
-                    return False, f"Failed to generate SSL certificate: {message}"
             
             # Enable site
             success, message = self.enable_site(name)
             if not success:
                 return False, f"Failed to enable site: {message}"
             
-            # Test and reload NGINX
+            # Test and reload NGINX first to make the configuration active
             success, message = self.test_and_reload_nginx()
             if not success:
                 return False, f"NGINX configuration test failed: {message}"
+            
+            # Generate SSL certificate and update config to HTTPS if needed
+            if ssl:
+                success, message = self.generate_ssl_certificate(name)
+                if not success:
+                    return False, f"Failed to generate SSL certificate: {message}"
+                
+                # Regenerate NGINX config with full HTTPS configuration
+                success, message = self.generate_nginx_config(domain, temp_http_only=False)
+                if not success:
+                    return False, f"Failed to generate HTTPS NGINX config: {message}"
+                
+                # Test and reload NGINX again with HTTPS config
+                success, message = self.test_and_reload_nginx()
+                if not success:
+                    return False, f"NGINX HTTPS configuration test failed: {message}"
             
             # Add to domains list and save
             self.domains.append(domain)
@@ -365,26 +376,37 @@ class VPSManager:
                 self.disable_site(old_name)
                 self.remove_nginx_config(old_name)
             
-            # Generate new configuration
-            success, message = self.generate_nginx_config(domain)
+            # Generate initial NGINX configuration (HTTP-only if SSL is needed)
+            temp_http_only = domain.ssl  # Use HTTP-only config initially if SSL is requested
+            success, message = self.generate_nginx_config(domain, temp_http_only)
             if not success:
                 return False, f"Failed to generate NGINX config: {message}"
-            
-            # Handle SSL certificate
-            if domain.ssl:
-                success, message = self.generate_ssl_certificate(domain.name)
-                if not success:
-                    return False, f"Failed to generate SSL certificate: {message}"
             
             # Enable site
             success, message = self.enable_site(domain.name)
             if not success:
                 return False, f"Failed to enable site: {message}"
             
-            # Test and reload NGINX
+            # Test and reload NGINX first to make the configuration active
             success, message = self.test_and_reload_nginx()
             if not success:
                 return False, f"NGINX configuration test failed: {message}"
+            
+            # Handle SSL certificate generation and update config to HTTPS if needed
+            if domain.ssl:
+                success, message = self.generate_ssl_certificate(domain.name)
+                if not success:
+                    return False, f"Failed to generate SSL certificate: {message}"
+                
+                # Regenerate NGINX config with full HTTPS configuration
+                success, message = self.generate_nginx_config(domain, temp_http_only=False)
+                if not success:
+                    return False, f"Failed to generate HTTPS NGINX config: {message}"
+                
+                # Test and reload NGINX again with HTTPS config
+                success, message = self.test_and_reload_nginx()
+                if not success:
+                    return False, f"NGINX HTTPS configuration test failed: {message}"
             
             self.save_domains()
             Logger.info(f"Domain {old_name} edited successfully")
@@ -427,8 +449,13 @@ class VPSManager:
             Logger.error(f"Failed to delete domain {name}: {e}")
             return False, str(e)
     
-    def generate_nginx_config(self, domain: Domain) -> Tuple[bool, str]:
-        """Generate NGINX configuration for a domain"""
+    def generate_nginx_config(self, domain: Domain, temp_http_only: bool = False) -> Tuple[bool, str]:
+        """Generate NGINX configuration for a domain
+        
+        Args:
+            domain: Domain object
+            temp_http_only: If True, generate HTTP-only config even for SSL domains (for initial setup)
+        """
         try:
             # Determine template to use
             if domain.custom_config:
@@ -455,26 +482,35 @@ class VPSManager:
             config_content = config_content.replace('$SSL_KEY_PATH', ssl_key_path)
             config_content = config_content.replace('$BACKEND_IP', backend_ip)
             
-            # If SSL is disabled, use only HTTP configuration
-            if not domain.ssl:
-                # Extract only HTTP server block
+            # If SSL is disabled OR we need temp HTTP-only config, use only HTTP configuration
+            if not domain.ssl or temp_http_only:
+                # Extract only HTTP server block (the last one in the template)
                 lines = config_content.split('\n')
                 http_config = []
                 in_http_block = False
                 brace_count = 0
+                last_server_start = -1
                 
-                for line in lines:
-                    if 'server {' in line and 'listen 80' in config_content[config_content.find(line):config_content.find(line)+200]:
-                        in_http_block = True
-                        brace_count = 0
-                    
-                    if in_http_block:
-                        http_config.append(line)
-                        brace_count += line.count('{')
-                        brace_count -= line.count('}')
+                # Find the last server block (HTTP-only block)
+                for i, line in enumerate(lines):
+                    if 'server {' in line:
+                        last_server_start = i
+                
+                # Extract from the last server block
+                if last_server_start >= 0:
+                    for i in range(last_server_start, len(lines)):
+                        line = lines[i]
+                        if 'server {' in line:
+                            in_http_block = True
+                            brace_count = 0
                         
-                        if brace_count == 0 and '}' in line:
-                            break
+                        if in_http_block:
+                            http_config.append(line)
+                            brace_count += line.count('{')
+                            brace_count -= line.count('}')
+                            
+                            if brace_count == 0 and '}' in line:
+                                break
                 
                 config_content = '\n'.join(http_config)
             
@@ -483,8 +519,9 @@ class VPSManager:
             with open(config_file, 'w') as f:
                 f.write(config_content)
             
-            Logger.info(f"NGINX configuration generated for {domain.name}")
-            return True, "Configuration generated successfully"
+            config_type = "HTTP-only" if (not domain.ssl or temp_http_only) else "HTTPS"
+            Logger.info(f"NGINX {config_type} configuration generated for {domain.name}")
+            return True, f"{config_type} configuration generated successfully"
             
         except Exception as e:
             Logger.error(f"Failed to generate NGINX config for {domain.name}: {e}")
