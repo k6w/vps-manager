@@ -124,10 +124,20 @@ sed -i 's/\r$//' "$MANAGER_DIR/vps-manager.py"
 log "Updating shebang line..."
 sed -i "1s|.*|#!/usr/bin/env $PYTHON_CMD|" "$MANAGER_DIR/vps-manager.py"
 
-# Install Python dependencies
-log "Installing Python dependencies..."
+# Create and setup virtual environment
+log "Creating Python virtual environment..."
 cd "$MANAGER_DIR"
-$PYTHON_CMD -m pip install -r requirements.txt
+$PYTHON_CMD -m venv venv
+
+# Install Python dependencies in virtual environment
+log "Installing Python dependencies in virtual environment..."
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+
+# Update vps-manager.py to use virtual environment Python
+log "Updating vps-manager.py to use virtual environment..."
+sed -i "1s|.*|#!$MANAGER_DIR/venv/bin/python3|" "$MANAGER_DIR/vps-manager.py"
 
 # Create symbolic link for easy access
 log "Creating symbolic link..."
@@ -144,7 +154,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=$MANAGER_DIR
-ExecStart=/usr/bin/python3 $MANAGER_DIR/vps-manager.py
+ExecStart=$MANAGER_DIR/venv/bin/python3 $MANAGER_DIR/vps-manager.py
 Restart=on-failure
 RestartSec=5
 
@@ -192,11 +202,16 @@ sudo vps-manager
 
 ### Command Line Usage
 ```bash
-# Start the interactive manager
-sudo python3 /home/$(whoami)/manager/vps-manager.py
+# Start the interactive manager (using virtual environment)
+sudo /home/$(whoami)/manager/vps-manager.py
 
 # Or use the symbolic link
 sudo vps-manager
+
+# Manual activation of virtual environment (if needed)
+cd /home/$(whoami)/manager
+source venv/bin/activate
+python3 vps-manager.py
 ```
 
 ### Features
@@ -215,6 +230,11 @@ sudo vps-manager
 ├── vps-manager.py          # Main application
 ├── domains.json            # Domain configurations
 ├── manager.log             # Application logs
+├── requirements.txt        # Python dependencies
+├── venv/                   # Python virtual environment
+│   ├── bin/
+│   ├── lib/
+│   └── ...
 ├── templates/
 │   └── default.conf        # Default NGINX template
 ├── backups/                # Configuration backups
