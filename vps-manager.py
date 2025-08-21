@@ -1271,7 +1271,7 @@ class TerminalUI:
             ssl_enabled = ssl_choice.lower() in ['y', 'yes']
             
             # Get custom config preference
-            custom_choice = self._get_input(stdscr, "Use custom config? (y/N)", 7, 2, "n")
+            custom_choice = self._get_input(stdscr, "Use custom config? (Y/n)", 7, 2, "y")
             if custom_choice is None:  # User cancelled
                 return
             custom_config = None
