@@ -372,7 +372,6 @@ MIT License - see LICENSE file for details.
 - **Documentation**: [DOCS.md](DOCS.md)
 - **Issues**: GitHub Issues
 - **Discussions**: GitHub Discussions
-- **Email**: support@vps-manager.com
 
 ## Changelog
 
