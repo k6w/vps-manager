@@ -363,25 +363,11 @@ python -m pytest tests/
 flake8 vps-manager.py
 ```
 
-## License
-
-MIT License - see LICENSE file for details.
-
 ## Support
 
 - **Documentation**: [DOCS.md](DOCS.md)
 - **Issues**: GitHub Issues
 - **Discussions**: GitHub Discussions
-
-## Changelog
-
-### v1.0.0 (2024-01-01)
-- Initial release
-- Core domain management functionality
-- SSL certificate automation
-- Backup and restore system
-- Interactive terminal UI
-- Comprehensive logging
 
 ---
 
