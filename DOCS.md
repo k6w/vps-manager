@@ -94,11 +94,20 @@ server {
 ## Directory Structure
 
 ```
+vps-manager/
+├── src/
+│   └── vps_manager/
+│       ├── __init__.py
+│       ├── main.py        # Entry point
+│       ├── core.py        # Core logic
+│       ├── ui.py          # User interface
+│       └── utils.py       # Utilities
+├── tests/                 # Unit tests
+└── setup.py               # Package configuration
+
+# Runtime data (created in ~/manager/ during use):
 ~/manager/
-├── vps-manager.py          # Main application
 ├── domains.json            # Domain configurations
-├── templates/
-│   └── default.conf        # Default NGINX template
 ├── custom-configs/
 │   ├── api-server.conf     # Custom template example
 │   └── static-site.conf    # Another custom template

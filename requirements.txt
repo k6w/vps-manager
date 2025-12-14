@@ -1,28 +1,3 @@
-# VPS Manager Dependencies
-# Install with: pip3 install -r requirements.txt
-
-# Core dependencies (usually pre-installed on Ubuntu)
-# curses - Terminal UI (built-in Python module)
-# subprocess - Command execution (built-in Python module)
-# json - Data serialization (built-in Python module)
-# pathlib - Path handling (built-in Python module)
-# datetime - Date/time handling (built-in Python module)
-# shutil - File operations (built-in Python module)
-# re - Regular expressions (built-in Python module)
-# os - Operating system interface (built-in Python module)
-# sys - System-specific parameters (built-in Python module)
-
-# Additional dependencies for enhanced functionality
-psutil>=5.8.0          # System and process utilities
-requests>=2.25.1       # HTTP requests for API calls
-pyyaml>=5.4.1          # YAML configuration support
-colorama>=0.4.4        # Cross-platform colored terminal text
-tabulate>=0.8.9        # Pretty-print tabular data
-click>=8.0.0           # Command line interface creation
-cryptography>=3.4.8    # SSL certificate handling
-dnspython>=2.1.0       # DNS resolution utilities
-
-# Development dependencies (optional)
-# pytest>=6.2.4        # Testing framework
-# black>=21.5b0         # Code formatter
-# flake8>=3.9.2         # Code linting
+pytest
+black
+flake8

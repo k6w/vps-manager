@@ -37,21 +37,24 @@ A comprehensive terminal-based manager for Ubuntu 24.04 VPS that simplifies NGIN
 
 ### Installation
 
-1. **Download and run the installer:**
+1. **Using pip (recommended):**
    ```bash
-   curl -sSL https://raw.githubusercontent.com/k6w/vps-manager/main/install.sh | bash
+   # Clone the repository
+   git clone https://github.com/k6w/vps-manager.git
+   cd vps-manager
+   
+   # Install the package
+   sudo pip install .
    ```
 
-2. **Or manual installation:**
+2. **Using Makefile:**
    ```bash
-   # Clone or download the files
-   mkdir -p ~/manager
-   cd ~/manager
+   # Clone the repository
+   git clone https://github.com/k6w/vps-manager.git
+   cd vps-manager
    
-   # Copy the files (vps-manager.py, default.conf, requirements.txt, install.sh)
-   # Then run:
-   chmod +x install.sh
-   sudo ./install.sh
+   # Install using make
+   sudo make install
    ```
 
 3. **Start the manager:**
@@ -190,19 +193,26 @@ server {
 ## Directory Structure
 
 ```
+vps-manager/
+├── src/
+│   └── vps_manager/
+│       ├── __init__.py
+│       ├── main.py        # Entry point
+│       ├── core.py        # Core logic
+│       ├── ui.py          # User interface
+│       └── utils.py       # Utilities
+├── tests/                 # Unit tests
+├── setup.py               # Package configuration
+├── Makefile               # Build automation
+├── requirements.txt       # Dependencies
+└── default.conf           # Default NGINX template
+
+# Runtime data (created during use):
 ~/manager/
-├── vps-manager.py          # Main application
 ├── domains.json            # Domain configurations
-├── requirements.txt        # Python dependencies
-├── install.sh             # Installation script
-├── templates/
-│   └── default.conf        # Default NGINX template
-├── custom-configs/
-│   └── *.conf             # Custom templates
-├── backups/
-│   └── *.tar.gz           # Configuration backups
-└── logs/
-    └── manager.log         # Application logs
+├── custom-configs/         # Custom templates
+├── backups/               # Configuration backups
+└── logs/                  # Application logs
 ```
 
 ## Advanced Usage
@@ -353,14 +363,21 @@ sudo sysctl -p
 git clone https://github.com/k6w/vps-manager.git
 cd vps-manager
 
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Install in development mode
+pip install -e .[dev]
+
+# Or use Makefile
+make dev
 
 # Run tests
-python -m pytest tests/
+make test
+# or directly:
+python -m unittest discover tests
 
 # Run linting
-flake8 vps-manager.py
+make lint
+# or directly:
+flake8 src/
 ```
 
 ## Support
