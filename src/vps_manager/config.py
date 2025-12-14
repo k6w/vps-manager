@@ -164,7 +164,11 @@ class ConfigManager:
             if 'version_control' in data and isinstance(data['version_control'], dict):
                 data['version_control'] = VersionControlConfig(**data['version_control'])
             
-            return AppConfig(**data)
+            # Filter out unknown fields for backward compatibility
+            valid_fields = {'first_run_complete', 'alerts', 'firewall', 'security', 'docker', 'version_control'}
+            filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+            
+            return AppConfig(**filtered_data)
         except Exception as e:
             print(f"Error loading config: {e}")
             return AppConfig()

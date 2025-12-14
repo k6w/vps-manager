@@ -187,6 +187,56 @@ class VPSManager:
             except Exception as e:
                 logger.error(f"Failed to load domains: {e}")
                 self.domains = []
+        
+        # Import existing nginx configurations if domains list is empty
+        if len(self.domains) == 0:
+            imported = self.import_existing_domains()
+            if imported > 0:
+                logger.info(f"Imported {imported} existing domains from nginx")
+                self.save_domains()
+    
+    def import_existing_domains(self) -> int:
+        """Import existing nginx domain configurations"""
+        imported_count = 0
+        try:
+            if not NGINX_SITES_DIR.exists():
+                return 0
+            
+            for config_file in NGINX_SITES_DIR.iterdir():
+                if config_file.is_file() and config_file.name not in ['default', 'default.conf']:
+                    domain_name = config_file.name
+                    
+                    # Skip if already in our list
+                    if self.domain_exists(domain_name):
+                        continue
+                    
+                    # Try to extract port from nginx config
+                    port = 80
+                    ssl = False
+                    try:
+                        with open(config_file, 'r') as f:
+                            content = f.read()
+                            
+                            # Look for proxy_pass with port
+                            port_match = re.search(r'proxy_pass\s+https?://[^:]+:(\d+)', content)
+                            if port_match:
+                                port = int(port_match.group(1))
+                            
+                            # Check for SSL configuration
+                            ssl = 'ssl_certificate' in content or 'listen 443' in content
+                    except Exception as e:
+                        logger.warning(f"Could not parse {config_file}: {e}")
+                    
+                    # Create domain object
+                    domain = Domain(domain_name, port, ssl)
+                    self.domains.append(domain)
+                    imported_count += 1
+                    logger.info(f"Imported domain: {domain_name} (port {port}, SSL: {ssl})")
+            
+            return imported_count
+        except Exception as e:
+            logger.error(f"Failed to import existing domains: {e}")
+            return imported_count
     
     def save_domains(self):
         """Save domains to JSON file"""
