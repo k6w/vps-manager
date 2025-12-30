@@ -1,0 +1,2 @@
+[console_scripts]
+vps-manager = vps_manager.main:main

@@ -1,0 +1,53 @@
+{
+  "first_run_complete": false,
+  "alerts": {
+    "enabled": true,
+    "check_interval": 300,
+    "email": {
+      "enabled": false,
+      "smtp_server": "",
+      "smtp_port": 587,
+      "username": "",
+      "password": "",
+      "from_email": "",
+      "to_emails": [],
+      "use_tls": true
+    },
+    "slack": {
+      "enabled": false,
+      "webhook_url": "",
+      "channel": ""
+    },
+    "discord": {
+      "enabled": false,
+      "webhook_url": ""
+    },
+    "webhook": {
+      "enabled": false,
+      "url": "",
+      "headers": {}
+    }
+  },
+  "firewall": {
+    "enabled": false,
+    "auto_enable": false,
+    "default_policy_input": "deny",
+    "default_policy_output": "allow",
+    "default_policy_forward": "deny"
+  },
+  "security": {
+    "enabled": true,
+    "auto_scan_on_startup": false,
+    "auto_apply_fixes": false
+  },
+  "docker": {
+    "enabled": true,
+    "auto_discover": true,
+    "auto_configure": false
+  },
+  "version_control": {
+    "enabled": true,
+    "auto_commit": false,
+    "auto_commit_message": "Auto-commit: Configuration changes"
+  }
+}

@@ -1,0 +1,14 @@
+services:
+  vps-manager:
+    build: .
+    container_name: vps-manager-test
+    ports:
+      - "8081:80"
+      - "8444:443"
+    volumes:
+      - .:/root/manager
+    environment:
+      - MOCK_CERTBOT=true
+    stdin_open: true
+    tty: true
+    command: ./entrypoint.sh

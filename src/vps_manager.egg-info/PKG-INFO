@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: vps-manager
+Version: 1.2.3
+Summary: A comprehensive terminal-based manager for NGINX domains and SSL certificates
+Author: k6w
+Requires-Python: >=3.8
+Provides-Extra: dev

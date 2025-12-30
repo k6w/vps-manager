@@ -1,0 +1,6 @@
+rich>=13.0.0
+
+[dev]
+black>=23.0.0
+flake8>=6.0.0
+pytest>=7.0.0
